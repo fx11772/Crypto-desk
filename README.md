@@ -9,3 +9,7 @@ Flux est développé en **Go 1.27**. Go a été retenu pour son modèle de concu
 ## Framework et modèle d’exécution
 
 La proposition P0.2 retient la bibliothèque standard Go pour l’infrastructure applicative et un service autonome à processus unique. Le Scheduler, la Collection Queue et le Worker Pool y fonctionneront ensemble ; le pool démarrera avec trois workers concurrents, selon une limite configurable. Voir la [décision P0.2](docs/decisions/0002-framework-and-execution-model.md).
+
+## PostgreSQL et migrations
+
+Flux utilisera **pgx v5.11.0** avec **pgxpool** et l’API native pgx. Les migrations seront des fichiers SQL versionnés gérés par **Goose v3.29.0**, exécutés par la CLI avant le démarrage de Flux. Aucun ORM ne sera utilisé. Voir la [décision P0.3](docs/decisions/0003-postgresql-driver-and-migrations.md).
