@@ -1,0 +1,21 @@
+# Compiled Flux executable
+/flux
+
+# Go test binaries
+*.test
+
+# Go coverage files
+coverage.out
+coverage.html
+
+# Environment variables and secrets
+.env
+.env.*
+!.env.example
+
+# macOS
+.DS_Store
+
+# IDE
+.idea/
+.vscode/
