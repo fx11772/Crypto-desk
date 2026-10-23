@@ -3,5 +3,5 @@ package main
 import "fmt"
 
 func main() {
-    fmt.Println("Flux started")
+	fmt.Println("Flux started")
 }
