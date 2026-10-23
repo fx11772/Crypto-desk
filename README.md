@@ -17,3 +17,7 @@ Flux utilisera **pgx v5.11.0** avec **pgxpool** et l’API native pgx. Les migra
 ## HTTP et tests
 
 Flux utilisera `net/http` et `context.Context` avec des timeouts configurables. Les tests s’appuieront sur `testing`, `testify` v1 (`assert`, `require`) et `net/http/httptest`. Les tests de concurrence seront exécutés avec `go test -race ./...`. Aucun framework HTTP externe ne sera ajouté. Voir la [décision P0.4](docs/decisions/0004-http-client-and-testing.md).
+
+## Commandes de développement
+
+Les commandes Makefile s’exécutent depuis la racine du dépôt avec `make -C flux <cible>`. La liste est disponible via `make -C flux help` : `run`, `build`, `test`, `test-race`, `fmt`, `vet` et `clean`. `run` exécute actuellement le point d’entrée au premier plan dans un conteneur temporaire ; le programme se termine après son message de démarrage, donc aucun arrêt séparé n’est nécessaire.
