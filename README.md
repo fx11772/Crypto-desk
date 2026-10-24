@@ -2,6 +2,43 @@
 
 Flux collecte, normalise et conserve des données de marché. Les décisions d’architecture du projet sont consignées dans [`docs/decisions/`](docs/decisions/).
 
+## Démarrage local
+
+### Prérequis
+
+- Docker installé et son daemon en cours d’exécution.
+- GNU Make disponible dans le terminal.
+- Une connexion réseau au premier lancement pour récupérer l’image Go `golang:1.27.3` et les modules Go.
+
+Go n’a pas besoin d’être installé sur la machine hôte : le Makefile exécute les commandes Go dans Docker. Le squelette actuel ne se connecte pas encore à PostgreSQL ni à Kraken.
+
+### Préparer la configuration
+
+Depuis la racine du dépôt, crée le fichier local ignoré par Git à partir de l’exemple :
+
+```sh
+cp flux/internal/.env.example flux/internal/.env
+```
+
+`FLUX_DB_PASSWORD` doit être non vide pour que la validation passe. La valeur `change-me-locally` de l’exemple est un placeholder, pas un secret ni un mot de passe de base de données fonctionnel. Le détail de toutes les variables est dans [`flux/CONFIGURATION.md`](flux/CONFIGURATION.md).
+
+### Démarrer et vérifier
+
+```sh
+make -C flux run
+```
+
+La commande lance le point d’entrée dans un conteneur temporaire. Flux charge et valide sa configuration, affiche quelques paramètres non sensibles, puis termine. Il n’y a pas encore de service continu ni de commande d’arrêt séparée.
+
+Pour voir les autres commandes de développement :
+
+```sh
+make -C flux help
+make -C flux test
+make -C flux test-race
+make -C flux vet
+```
+
 ## Langage et runtime
 
 Flux est développé en **Go 1.27**. Go a été retenu pour son modèle de concurrence adapté au Scheduler, à la Queue et au Worker Pool, son adéquation aux services réseau longue durée, son runtime léger et son déploiement sous forme de binaire compilé. Sa bibliothèque standard couvre les besoins HTTP, temps et concurrence du projet, et son écosystème offre une intégration PostgreSQL mature.
