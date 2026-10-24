@@ -21,3 +21,7 @@ Flux utilisera `net/http` et `context.Context` avec des timeouts configurables. 
 ## Commandes de développement
 
 Les commandes Makefile s’exécutent depuis la racine du dépôt avec `make -C flux <cible>`. La liste est disponible via `make -C flux help` : `run`, `build`, `test`, `test-race`, `fmt`, `vet` et `clean`. `run` exécute actuellement le point d’entrée au premier plan dans un conteneur temporaire ; le programme se termine après son message de démarrage, donc aucun arrêt séparé n’est nécessaire.
+
+## Configuration locale
+
+L’exemple sans secret se trouve dans [`flux/internal/.env.example`](flux/internal/.env.example). Pour le démarrage local, copie-le vers `flux/internal/.env`, puis remplace `FLUX_DB_PASSWORD=change-me-locally` par le mot de passe de ta base PostgreSQL locale. Le fichier `.env` local est ignoré par Git. La liste des variables et leurs règles est détaillée dans [`flux/CONFIGURATION.md`](flux/CONFIGURATION.md).
