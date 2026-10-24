@@ -1,0 +1,51 @@
+name: CI
+
+on:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  checks:
+    name: Go checks
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+
+      - name: Set up Go
+        uses: actions/setup-go@v7
+        with:
+          go-version-file: flux/go.mod
+          cache-dependency-path: flux/go.sum
+
+      - name: Download Go modules
+        working-directory: flux
+        run: go mod download
+
+      - name: Check Go formatting
+        working-directory: flux
+        run: |
+          unformatted="$(gofmt -l cmd internal)"
+          if [ -n "$unformatted" ]; then
+            printf 'These Go files need gofmt:\n%s\n' "$unformatted"
+            exit 1
+          fi
+
+      - name: Run go vet
+        working-directory: flux
+        run: go vet ./...
+
+      - name: Run tests
+        working-directory: flux
+        run: go test ./...
+
+      - name: Run race detector
+        working-directory: flux
+        run: go test -race ./...
+
+      - name: Build Flux
+        working-directory: flux
+        run: go build ./...

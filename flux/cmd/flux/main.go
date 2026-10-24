@@ -3,8 +3,8 @@ package main
 import (
 	"log"
 
-	"github.com/joho/godotenv"
 	"flux/internal/config"
+	"github.com/joho/godotenv"
 )
 
 func main() {
