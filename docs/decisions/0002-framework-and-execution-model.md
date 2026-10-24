@@ -1,6 +1,6 @@
 # Décision 0002 : framework et modèle d’exécution
 
-- **Statut :** proposition
+- **Statut :** acceptée
 - **Date :** 2026-10-20
 - **Périmètre :** service Flux
 
@@ -8,7 +8,7 @@
 
 Flux est un service autonome de collecte continue. Il orchestre un Scheduler, une Collection Queue et un Worker Pool pour exécuter des tâches réseau.
 
-## Proposition
+## Décision
 
 ### Framework
 

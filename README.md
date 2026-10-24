@@ -45,7 +45,7 @@ Flux est développé en **Go 1.27**. Go a été retenu pour son modèle de concu
 
 ## Framework et modèle d’exécution
 
-La proposition P0.2 retient la bibliothèque standard Go pour l’infrastructure applicative et un service autonome à processus unique. Le Scheduler, la Collection Queue et le Worker Pool y fonctionneront ensemble ; le pool démarrera avec trois workers concurrents, selon une limite configurable. Voir la [décision P0.2](docs/decisions/0002-framework-and-execution-model.md).
+La décision P0.2 retient la bibliothèque standard Go pour l’infrastructure applicative et un service autonome à processus unique. Le Scheduler, la Collection Queue et le Worker Pool y fonctionneront ensemble ; le pool démarrera avec trois workers concurrents, selon une limite configurable. Voir la [décision P0.2](docs/decisions/0002-framework-and-execution-model.md).
 
 ## PostgreSQL et migrations
 
