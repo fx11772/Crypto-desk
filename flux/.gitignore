@@ -12,6 +12,36 @@ coverage.html
 .env
 .env.*
 !.env.example
+.envrc
+.direnv/
+.aws/
+.ssh/
+secrets/
+credentials/
+*.pem
+*.key
+*.p12
+*.pfx
+*.log
+*.log.*
+*.bak
+*.backup
+*.dump
+
+# Local Docker Compose configuration and data
+compose.override.yml
+compose.override.yaml
+docker-compose.override.yml
+docker-compose.override.yaml
+compose.local.yml
+compose.local.yaml
+docker-compose.local.yml
+docker-compose.local.yaml
+postgres_data/
+pgdata/
+*.db
+*.sqlite
+*.sqlite3
 
 # macOS
 .DS_Store

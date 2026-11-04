@@ -1,0 +1,38 @@
+services:
+  flux-app:
+    container_name: flux-app-1
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: flux-app:dev
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      FLUX_DB_HOST: flux-db
+    depends_on:
+      flux-db:
+        condition: service_healthy
+    stop_grace_period: 30s
+
+  flux-db:
+    container_name: flux-db-1
+    image: postgres:17-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${FLUX_DB_NAME:?FLUX_DB_NAME is required}
+      POSTGRES_USER: ${FLUX_DB_USER:?FLUX_DB_USER is required}
+      POSTGRES_PASSWORD: ${FLUX_DB_PASSWORD:?FLUX_DB_PASSWORD is required}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - pg_isready -U "$$POSTGRES_USER" -d "$$POSTGRES_DB"
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+volumes:
+  postgres_data:
