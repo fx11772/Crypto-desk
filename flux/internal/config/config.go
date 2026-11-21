@@ -27,6 +27,34 @@ type DatabaseConfig struct {
 	SSLMode  string
 }
 
+func (c DatabaseConfig) Validate() error {
+	if strings.TrimSpace(c.Host) == "" {
+		return fmt.Errorf("FLUX_DB_HOST is required")
+	}
+
+	if strings.TrimSpace(c.Name) == "" {
+		return fmt.Errorf("FLUX_DB_NAME is required")
+	}
+
+	if strings.TrimSpace(c.User) == "" {
+		return fmt.Errorf("FLUX_DB_USER is required")
+	}
+
+	if strings.TrimSpace(c.Password) == "" {
+		return fmt.Errorf("FLUX_DB_PASSWORD is required")
+	}
+
+	if c.Port < 1 || c.Port > 65535 {
+		return fmt.Errorf("FLUX_DB_PORT must be between 1 and 65535")
+	}
+
+	if c.SSLMode != "disable" {
+		return fmt.Errorf("FLUX_DB_SSLMODE must be disable")
+	}
+
+	return nil
+}
+
 type KrakenConfig struct {
 	BaseURL string
 	Timeout time.Duration
@@ -74,10 +102,10 @@ func Load() (*Config, error) {
 		Environment: getEnv("FLUX_ENV", "development"),
 		LogLevel:    getEnv("FLUX_LOG_LEVEL", "info"),
 		Database: DatabaseConfig{
-			Host:     getEnv("FLUX_DB_HOST", "localhost"),
+			Host:     getEnv("FLUX_DB_HOST", ""),
 			Port:     dbPort,
-			Name:     getEnv("FLUX_DB_NAME", "flux"),
-			User:     getEnv("FLUX_DB_USER", "flux"),
+			Name:     getEnv("FLUX_DB_NAME", ""),
+			User:     getEnv("FLUX_DB_USER", ""),
 			Password: os.Getenv("FLUX_DB_PASSWORD"),
 			SSLMode:  getEnv("FLUX_DB_SSLMODE", "disable"),
 		},
@@ -101,40 +129,29 @@ func Load() (*Config, error) {
 
 // Validate checks required settings and valid ranges.
 func (c *Config) Validate() error {
-	if c.Database.Host == "" ||
-		c.Database.Name == "" ||
-		c.Database.User == "" {
-		return fmt.Errorf("missing PostgreSQL configuration")
+	// Validate PostgreSQL configuration.
+	if err := c.Database.Validate(); err != nil {
+		return err
 	}
 
-	if c.Database.Password == "" {
-		return fmt.Errorf("FLUX_DB_PASSWORD is required")
-	}
-
-	if c.Database.Port < 1 || c.Database.Port > 65535 {
-		return fmt.Errorf("FLUX_DB_PORT must be between 1 and 65535")
-	}
-
-	switch c.Database.SSLMode {
-	case "disable", "allow", "prefer", "require", "verify-ca", "verify-full":
-	default:
-		return fmt.Errorf("invalid FLUX_DB_SSLMODE")
-	}
-
+	// Validate Kraken URL.
 	parsedURL, err := url.Parse(c.Kraken.BaseURL)
 	if err != nil || parsedURL.Scheme != "https" ||
 		parsedURL.Host == "" {
 		return fmt.Errorf("FLUX_KRAKEN_BASE_URL must be a valid HTTPS URL")
 	}
 
+	// Validate Kraken timeout.
 	if c.Kraken.Timeout <= 0 {
 		return fmt.Errorf("Kraken timeout must be positive")
 	}
 
+	// Validate worker count.
 	if c.Flux.WorkerCount <= 0 {
 		return fmt.Errorf("FLUX_WORKER_COUNT must be positive")
 	}
 
+	// Validate candle close delay.
 	if c.Flux.CandleCloseDelay < 0 {
 		return fmt.Errorf("candle close delay cannot be negative")
 	}
@@ -160,7 +177,7 @@ func getInt(key string, fallback int) (int, error) {
 
 	number, err := strconv.Atoi(strings.TrimSpace(value))
 	if err != nil {
-		return 0, fmt.Errorf("%s must be an integer: %w", key, err)
+		return 0, fmt.Errorf("%s must be an integer", key)
 	}
 
 	return number, nil
