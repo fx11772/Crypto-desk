@@ -1,0 +1,45 @@
+services:
+  flux-db-test:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_DB: flux_test
+      POSTGRES_USER: flux_test
+      POSTGRES_PASSWORD: flux_test
+    tmpfs:
+      - /var/lib/postgresql/data
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - pg_isready -U flux_test -d flux_test
+      interval: 2s
+      timeout: 5s
+      retries: 15
+
+  flux-tests:
+    image: golang:1.27.3
+    working_dir: /app
+    volumes:
+      - .:/app
+    environment:
+      FLUX_DB_HOST: flux-db-test
+      FLUX_DB_PORT: "5432"
+      FLUX_DB_NAME: flux_test
+      FLUX_DB_USER: flux_test
+      FLUX_DB_PASSWORD: flux_test
+      FLUX_DB_SSL_MODE: disable
+    depends_on:
+      flux-db-test:
+        condition: service_healthy
+    command: ["go", "test", "-tags=integration", "-v", "./..."]
+
+  flux-migrate-test:
+    image: migrate/migrate:v4.19.1
+    volumes:
+      - ./migrations:/migrations:ro
+    depends_on:
+      flux-db-test:
+        condition: service_healthy
+    entrypoint:
+      - migrate
+      - -path=/migrations
+      - -database=postgres://flux_test:flux_test@flux-db-test:5432/flux_test?sslmode=disable

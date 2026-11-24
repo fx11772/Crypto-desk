@@ -7,7 +7,7 @@ CONTAINER_GO := podman run --rm \
 	-w /app \
 	$(GO_IMAGE)
 
-.PHONY: run build test test-race fmt vet clean db-start migrate-up help
+.PHONY: run build test test-race test-integration fmt vet clean db-start migrate-up help
 
 run:
 	$(CONTAINER_GO) go run ./cmd/flux
@@ -20,6 +20,9 @@ test:
 
 test-race:
 	$(CONTAINER_GO) go test -race ./...
+
+test-integration:
+	./scripts/run-integration-tests.sh
 
 fmt:
 	$(CONTAINER_GO) go fmt ./...
@@ -43,6 +46,7 @@ help:
 	@echo "  build        Compiler Flux"
 	@echo "  test         Exécuter les tests"
 	@echo "  test-race    Exécuter les tests avec le Race Detector"
+	@echo "  test-integration  Exécuter les tests d'intégration"
 	@echo "  fmt          Formater le code Go"
 	@echo "  vet          Analyser statiquement le code"
 	@echo "  clean        Supprimer l'exécutable compilé"
