@@ -2,7 +2,7 @@ GO_VERSION := 1.27.3
 GO_IMAGE := golang:$(GO_VERSION)
 .DEFAULT_GOAL := help
 
-DOCKER_GO := docker run --rm \
+CONTAINER_GO := podman run --rm \
 	-v "$(CURDIR):/app" \
 	-w /app \
 	$(GO_IMAGE)
@@ -10,22 +10,22 @@ DOCKER_GO := docker run --rm \
 .PHONY: run build test test-race fmt vet clean db-start migrate-up help
 
 run:
-	$(DOCKER_GO) go run ./cmd/flux
+	$(CONTAINER_GO) go run ./cmd/flux
 
 build:
-	$(DOCKER_GO) go build -o flux ./cmd/flux
+	$(CONTAINER_GO) go build -o flux ./cmd/flux
 
 test:
-	$(DOCKER_GO) go test ./...
+	$(CONTAINER_GO) go test ./...
 
 test-race:
-	$(DOCKER_GO) go test -race ./...
+	$(CONTAINER_GO) go test -race ./...
 
 fmt:
-	$(DOCKER_GO) go fmt ./...
+	$(CONTAINER_GO) go fmt ./...
 
 vet:
-	$(DOCKER_GO) go vet ./...
+	$(CONTAINER_GO) go vet ./...
 
 clean:
 	rm -f flux
