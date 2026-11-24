@@ -7,7 +7,7 @@ DOCKER_GO := docker run --rm \
 	-w /app \
 	$(GO_IMAGE)
 
-.PHONY: run build test test-race fmt vet clean help
+.PHONY: run build test test-race fmt vet clean db-start help
 
 run:
 	$(DOCKER_GO) go run ./cmd/flux
@@ -30,6 +30,9 @@ vet:
 clean:
 	rm -f flux
 
+db-start:
+	podman compose up -d flux-db
+
 help:
 	@echo "Commandes disponibles :"
 	@echo ""
@@ -40,4 +43,5 @@ help:
 	@echo "  fmt          Formater le code Go"
 	@echo "  vet          Analyser statiquement le code"
 	@echo "  clean        Supprimer l'exécutable compilé"
+	@echo "  db-start     Démarrer PostgreSQL localement"
 	@echo "  help         Afficher cette aide"
