@@ -78,3 +78,62 @@ func (r *CandleRepository) GetLast(
 
 	return &candle, nil
 }
+
+func (r *CandleRepository) InsertBatch(
+	ctx context.Context,
+	candles []domain.Candle,
+) error {
+	if len(candles) == 0 {
+		return nil
+	}
+
+	tx, err := r.pool.Begin(ctx)
+	if err != nil {
+		return fmt.Errorf("failed to begin candle transaction: %w", err)
+	}
+
+	defer tx.Rollback(context.Background())
+
+	const query = `
+		INSERT INTO candles (
+			exchange,
+			symbol,
+			timeframe,
+			timestamp,
+			open,
+			high,
+			low,
+			close,
+			volume
+		)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+		ON CONFLICT (exchange, symbol, timeframe, timestamp)
+		DO NOTHING
+	`
+
+	for _, candle := range candles {
+		_, err := tx.Exec(
+			ctx,
+			query,
+			candle.Exchange,
+			candle.Symbol,
+			candle.Timeframe,
+			candle.Timestamp.UTC(),
+			candle.Open,
+			candle.High,
+			candle.Low,
+			candle.Close,
+			candle.Volume,
+		)
+
+		if err != nil {
+			return fmt.Errorf("failed to insert candle: %w", err)
+		}
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return fmt.Errorf("failed to commit candle transaction: %w", err)
+	}
+
+	return nil
+}

@@ -4,10 +4,15 @@ package repository
 
 import (
 	"context"
+	"errors"
 	"os"
+	"strings"
 	"testing"
 	"time"
 
+	"flux/internal/domain"
+
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/shopspring/decimal"
 )
@@ -215,5 +220,373 @@ func TestCandleRepository_GetLast_DatabaseError(t *testing.T) {
 
 	if candle != nil {
 		t.Error("expected no candle when database access fails")
+	}
+}
+
+func TestCandleRepository_InsertBatch_InsertsCandles(t *testing.T) {
+	// Arrange
+	ctx := context.Background()
+	pool := setupTestPool(t)
+	repo := NewCandleRepository(pool)
+
+	clearCandles(t, pool)
+
+	t.Cleanup(func() {
+		clearCandles(t, pool)
+	})
+
+	candles := []domain.Candle{
+		{
+			Exchange:  "kraken",
+			Symbol:    "BTC/USD",
+			Timeframe: "15m",
+			Timestamp: time.Date(
+				2026, time.January, 1, 12, 0, 0, 0, time.UTC,
+			),
+			Open:   decimal.RequireFromString("100.123456789123456789"),
+			High:   decimal.NewFromInt(110),
+			Low:    decimal.NewFromInt(90),
+			Close:  decimal.NewFromInt(105),
+			Volume: decimal.NewFromInt(10),
+		},
+		{
+			Exchange:  "kraken",
+			Symbol:    "BTC/USD",
+			Timeframe: "15m",
+			Timestamp: time.Date(
+				2026, time.January, 1, 12, 15, 0, 0, time.UTC,
+			),
+			Open:   decimal.NewFromInt(105),
+			High:   decimal.NewFromInt(115),
+			Low:    decimal.NewFromInt(95),
+			Close:  decimal.NewFromInt(110),
+			Volume: decimal.NewFromInt(20),
+		},
+	}
+
+	// Act
+	err := repo.InsertBatch(ctx, candles)
+
+	// Assert
+	if err != nil {
+		t.Fatalf("unexpected insertion error: %v", err)
+	}
+
+	var count int
+
+	err = pool.QueryRow(
+		ctx,
+		"SELECT COUNT(*) FROM candles",
+	).Scan(&count)
+
+	if err != nil {
+		t.Fatalf("failed to count candles: %v", err)
+	}
+
+	if count != len(candles) {
+		t.Errorf(
+			"expected %d candles, got %d",
+			len(candles),
+			count,
+		)
+	}
+}
+
+func TestCandleRepository_InsertBatch_EmptyBatch(t *testing.T) {
+	// Arrange
+	ctx := context.Background()
+	pool := setupTestPool(t)
+	repo := NewCandleRepository(pool)
+
+	clearCandles(t, pool)
+
+	candles := []domain.Candle{}
+
+	// Act
+	err := repo.InsertBatch(ctx, candles)
+
+	// Assert
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	var count int
+
+	err = pool.QueryRow(
+		ctx,
+		"SELECT COUNT(*) FROM candles",
+	).Scan(&count)
+
+	if err != nil {
+		t.Fatalf("failed to count candles: %v", err)
+	}
+
+	if count != 0 {
+		t.Errorf("expected 0 candles, got %d", count)
+	}
+}
+
+func TestCandleRepository_InsertBatch_EmptyBatchWithoutConnection(t *testing.T) {
+	// Arrange
+	ctx := context.Background()
+	pool := setupTestPool(t)
+	repo := NewCandleRepository(pool)
+
+	pool.Close()
+
+	// Act
+	err := repo.InsertBatch(ctx, nil)
+
+	// Assert
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestCandleRepository_InsertBatch_IgnoresDuplicates(t *testing.T) {
+	// Arrange
+	ctx := context.Background()
+	pool := setupTestPool(t)
+	repo := NewCandleRepository(pool)
+
+	clearCandles(t, pool)
+
+	t.Cleanup(func() {
+		clearCandles(t, pool)
+	})
+
+	original := domain.Candle{
+		Exchange:  "kraken",
+		Symbol:    "BTC/USD",
+		Timeframe: "15m",
+		Timestamp: time.Date(
+			2026, time.January, 1,
+			12, 0, 0, 0, time.UTC,
+		),
+		Open:   decimal.NewFromInt(100),
+		High:   decimal.NewFromInt(110),
+		Low:    decimal.NewFromInt(90),
+		Close:  decimal.NewFromInt(105),
+		Volume: decimal.NewFromInt(10),
+	}
+
+	if err := repo.InsertBatch(ctx, []domain.Candle{original}); err != nil {
+		t.Fatalf("failed to insert original candle: %v", err)
+	}
+
+	duplicate := original
+	duplicate.Open = decimal.NewFromInt(200)
+	duplicate.High = decimal.NewFromInt(210)
+	duplicate.Low = decimal.NewFromInt(190)
+	duplicate.Close = decimal.NewFromInt(205)
+	duplicate.Volume = decimal.NewFromInt(50)
+
+	newCandle := original
+	newCandle.Timestamp = original.Timestamp.Add(15 * time.Minute)
+
+	// Act
+	err := repo.InsertBatch(ctx, []domain.Candle{
+		duplicate,
+		newCandle,
+	})
+
+	// Assert
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	var count int
+
+	err = pool.QueryRow(
+		ctx,
+		"SELECT COUNT(*) FROM candles",
+	).Scan(&count)
+
+	if err != nil {
+		t.Fatalf("failed to count candles: %v", err)
+	}
+
+	if count != 2 {
+		t.Errorf("expected 2 candles, got %d", count)
+	}
+
+	var open, high, low, close, volume decimal.Decimal
+
+	err = pool.QueryRow(
+		ctx,
+		`SELECT open, high, low, close, volume
+		 FROM candles
+		 WHERE exchange = $1
+		   AND symbol = $2
+		   AND timeframe = $3
+		   AND timestamp = $4`,
+		original.Exchange,
+		original.Symbol,
+		original.Timeframe,
+		original.Timestamp,
+	).Scan(&open, &high, &low, &close, &volume)
+
+	if err != nil {
+		t.Fatalf("failed to retrieve original candle: %v", err)
+	}
+
+	if !open.Equal(original.Open) ||
+		!high.Equal(original.High) ||
+		!low.Equal(original.Low) ||
+		!close.Equal(original.Close) ||
+		!volume.Equal(original.Volume) {
+		t.Error("original candle was modified")
+	}
+}
+
+func TestCandleRepository_InsertBatch_PreservesDecimalPrecision(t *testing.T) {
+	// Arrange
+	ctx := context.Background()
+	pool := setupTestPool(t)
+	repo := NewCandleRepository(pool)
+
+	clearCandles(t, pool)
+
+	t.Cleanup(func() {
+		clearCandles(t, pool)
+	})
+
+	candle := domain.Candle{
+		Exchange:  "kraken",
+		Symbol:    "BTC/USD",
+		Timeframe: "15m",
+		Timestamp: time.Date(
+			2026, time.January, 1,
+			12, 0, 0, 0, time.UTC,
+		),
+		Open:   decimal.RequireFromString("100.123456789123456789"),
+		High:   decimal.RequireFromString("110.987654321987654321"),
+		Low:    decimal.RequireFromString("90.000000000000000001"),
+		Close:  decimal.RequireFromString("105.111111111111111111"),
+		Volume: decimal.RequireFromString("0.000000000123456789"),
+	}
+
+	// Act
+	err := repo.InsertBatch(ctx, []domain.Candle{candle})
+
+	// Assert
+	if err != nil {
+		t.Fatalf("unexpected insertion error: %v", err)
+	}
+
+	var open, high, low, close, volume string
+
+	err = pool.QueryRow(
+		ctx,
+		`SELECT
+			open::text,
+			high::text,
+			low::text,
+			close::text,
+			volume::text
+		FROM candles
+		WHERE exchange = $1
+		  AND symbol = $2
+		  AND timeframe = $3
+		  AND timestamp = $4`,
+		candle.Exchange,
+		candle.Symbol,
+		candle.Timeframe,
+		candle.Timestamp,
+	).Scan(&open, &high, &low, &close, &volume)
+
+	if err != nil {
+		t.Fatalf("failed to retrieve inserted candle: %v", err)
+	}
+
+	if open != candle.Open.String() {
+		t.Errorf("expected open %s, got %s", candle.Open, open)
+	}
+
+	if high != candle.High.String() {
+		t.Errorf("expected high %s, got %s", candle.High, high)
+	}
+
+	if low != candle.Low.String() {
+		t.Errorf("expected low %s, got %s", candle.Low, low)
+	}
+
+	if close != candle.Close.String() {
+		t.Errorf("expected close %s, got %s", candle.Close, close)
+	}
+
+	if volume != candle.Volume.String() {
+		t.Errorf("expected volume %s, got %s", candle.Volume, volume)
+	}
+}
+
+func TestCandleRepository_InsertBatch_RollsBackOnError(t *testing.T) {
+	// Arrange
+	ctx := context.Background()
+	pool := setupTestPool(t)
+	repo := NewCandleRepository(pool)
+
+	clearCandles(t, pool)
+
+	t.Cleanup(func() {
+		clearCandles(t, pool)
+	})
+
+	first := domain.Candle{
+		Exchange:  "kraken",
+		Symbol:    "BTC/USD",
+		Timeframe: "15m",
+		Timestamp: time.Date(
+			2026, time.January, 1,
+			12, 0, 0, 0, time.UTC,
+		),
+		Open:   decimal.NewFromInt(100),
+		High:   decimal.NewFromInt(110),
+		Low:    decimal.NewFromInt(90),
+		Close:  decimal.NewFromInt(105),
+		Volume: decimal.NewFromInt(10),
+	}
+
+	invalid := first
+	invalid.Timestamp = first.Timestamp.Add(15 * time.Minute)
+	invalid.Exchange = strings.Repeat("a", 51)
+
+	last := first
+	last.Timestamp = first.Timestamp.Add(30 * time.Minute)
+
+	// Act
+	err := repo.InsertBatch(ctx, []domain.Candle{
+		first,
+		invalid,
+		last,
+	})
+
+	// Assert
+	if err == nil {
+		t.Fatal("expected an insertion error")
+	}
+
+	var pgErr *pgconn.PgError
+
+	if !errors.As(err, &pgErr) || pgErr.Code != "22001" {
+		t.Fatalf("expected a string length error, got %v", err)
+	}
+
+	var count int
+
+	err = pool.QueryRow(
+		ctx,
+		"SELECT COUNT(*) FROM candles",
+	).Scan(&count)
+
+	if err != nil {
+		t.Fatalf("failed to count candles: %v", err)
+	}
+
+	if count != 0 {
+		t.Errorf(
+			"expected 0 candles after rollback, got %d",
+			count,
+		)
 	}
 }
