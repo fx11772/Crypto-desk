@@ -265,11 +265,19 @@ func TestCandleRepository_InsertBatch_InsertsCandles(t *testing.T) {
 	}
 
 	// Act
-	err := repo.InsertBatch(ctx, candles)
+	result, err := repo.InsertBatch(ctx, candles)
 
 	// Assert
 	if err != nil {
 		t.Fatalf("unexpected insertion error: %v", err)
+	}
+
+	if result.InsertedCount != len(candles) {
+		t.Errorf("expected %d inserted candles, got %d", len(candles), result.InsertedCount)
+	}
+
+	if result.DuplicateCount != 0 {
+		t.Errorf("expected %d duplicates, got %d", 0, result.DuplicateCount)
 	}
 
 	var count int
@@ -303,11 +311,19 @@ func TestCandleRepository_InsertBatch_EmptyBatch(t *testing.T) {
 	candles := []domain.Candle{}
 
 	// Act
-	err := repo.InsertBatch(ctx, candles)
+	result, err := repo.InsertBatch(ctx, candles)
 
 	// Assert
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if result.InsertedCount != 0 {
+		t.Errorf("expected %d inserted candles, got %d", 0, result.InsertedCount)
+	}
+
+	if result.DuplicateCount != 0 {
+		t.Errorf("expected %d duplicates, got %d", 0, result.DuplicateCount)
 	}
 
 	var count int
@@ -335,11 +351,19 @@ func TestCandleRepository_InsertBatch_EmptyBatchWithoutConnection(t *testing.T) 
 	pool.Close()
 
 	// Act
-	err := repo.InsertBatch(ctx, nil)
+	result, err := repo.InsertBatch(ctx, nil)
 
 	// Assert
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if result.InsertedCount != 0 {
+		t.Errorf("expected %d inserted candles, got %d", 0, result.InsertedCount)
+	}
+
+	if result.DuplicateCount != 0 {
+		t.Errorf("expected %d duplicates, got %d", 0, result.DuplicateCount)
 	}
 }
 
@@ -370,7 +394,7 @@ func TestCandleRepository_InsertBatch_IgnoresDuplicates(t *testing.T) {
 		Volume: decimal.NewFromInt(10),
 	}
 
-	if err := repo.InsertBatch(ctx, []domain.Candle{original}); err != nil {
+	if _, err := repo.InsertBatch(ctx, []domain.Candle{original}); err != nil {
 		t.Fatalf("failed to insert original candle: %v", err)
 	}
 
@@ -385,7 +409,7 @@ func TestCandleRepository_InsertBatch_IgnoresDuplicates(t *testing.T) {
 	newCandle.Timestamp = original.Timestamp.Add(15 * time.Minute)
 
 	// Act
-	err := repo.InsertBatch(ctx, []domain.Candle{
+	result, err := repo.InsertBatch(ctx, []domain.Candle{
 		duplicate,
 		newCandle,
 	})
@@ -393,6 +417,14 @@ func TestCandleRepository_InsertBatch_IgnoresDuplicates(t *testing.T) {
 	// Assert
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if result.InsertedCount != 1 {
+		t.Errorf("expected %d inserted candles, got %d", 1, result.InsertedCount)
+	}
+
+	if result.DuplicateCount != 1 {
+		t.Errorf("expected %d duplicates, got %d", 1, result.DuplicateCount)
 	}
 
 	var count int
@@ -467,7 +499,7 @@ func TestCandleRepository_InsertBatch_PreservesDecimalPrecision(t *testing.T) {
 	}
 
 	// Act
-	err := repo.InsertBatch(ctx, []domain.Candle{candle})
+	_, err := repo.InsertBatch(ctx, []domain.Candle{candle})
 
 	// Assert
 	if err != nil {
@@ -555,7 +587,7 @@ func TestCandleRepository_InsertBatch_RollsBackOnError(t *testing.T) {
 	last.Timestamp = first.Timestamp.Add(30 * time.Minute)
 
 	// Act
-	err := repo.InsertBatch(ctx, []domain.Candle{
+	result, err := repo.InsertBatch(ctx, []domain.Candle{
 		first,
 		invalid,
 		last,
@@ -564,6 +596,14 @@ func TestCandleRepository_InsertBatch_RollsBackOnError(t *testing.T) {
 	// Assert
 	if err == nil {
 		t.Fatal("expected an insertion error")
+	}
+
+	if result.InsertedCount != 0 {
+		t.Errorf("expected %d inserted candles, got %d", 0, result.InsertedCount)
+	}
+
+	if result.DuplicateCount != 0 {
+		t.Errorf("expected %d duplicates, got %d", 0, result.DuplicateCount)
 	}
 
 	var pgErr *pgconn.PgError
@@ -588,5 +628,80 @@ func TestCandleRepository_InsertBatch_RollsBackOnError(t *testing.T) {
 			"expected 0 candles after rollback, got %d",
 			count,
 		)
+	}
+}
+
+func TestCandleRepository_InsertBatch_AllDuplicates(t *testing.T) {
+	// Arrange
+	ctx := context.Background()
+	pool := setupTestPool(t)
+	repo := NewCandleRepository(pool)
+
+	clearCandles(t, pool)
+
+	t.Cleanup(func() {
+		clearCandles(t, pool)
+	})
+
+	first := domain.Candle{
+		Exchange:  "kraken",
+		Symbol:    "BTC/USD",
+		Timeframe: "15m",
+		Timestamp: time.Date(
+			2026, time.January, 1,
+			12, 0, 0, 0, time.UTC,
+		),
+		Open:   decimal.NewFromInt(100),
+		High:   decimal.NewFromInt(110),
+		Low:    decimal.NewFromInt(90),
+		Close:  decimal.NewFromInt(105),
+		Volume: decimal.NewFromInt(10),
+	}
+
+	second := first
+	second.Timestamp = first.Timestamp.Add(15 * time.Minute)
+
+	candles := []domain.Candle{first, second}
+
+	if _, err := repo.InsertBatch(ctx, candles); err != nil {
+		t.Fatalf("failed to insert initial candles: %v", err)
+	}
+
+	// Act
+	result, err := repo.InsertBatch(ctx, candles)
+
+	// Assert
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if result.InsertedCount != 0 {
+		t.Errorf(
+			"expected 0 inserted candles, got %d",
+			result.InsertedCount,
+		)
+	}
+
+	if result.DuplicateCount != len(candles) {
+		t.Errorf(
+			"expected %d duplicates, got %d",
+			len(candles),
+			result.DuplicateCount,
+		)
+	}
+
+	var count int
+
+	err = pool.QueryRow(
+		ctx,
+		"SELECT COUNT(*) FROM candles",
+	).Scan(&count)
+
+	if err != nil {
+		t.Fatalf("failed to count candles: %v", err)
+	}
+
+	if count != len(candles) {
+		t.Errorf("expected %d candles, got %d", len(candles), count)
 	}
 }

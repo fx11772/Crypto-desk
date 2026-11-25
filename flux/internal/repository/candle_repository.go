@@ -82,14 +82,17 @@ func (r *CandleRepository) GetLast(
 func (r *CandleRepository) InsertBatch(
 	ctx context.Context,
 	candles []domain.Candle,
-) error {
+) (domain.SaveCandlesResult, error) {
+	var result domain.SaveCandlesResult
+
 	if len(candles) == 0 {
-		return nil
+		return result, nil
 	}
 
 	tx, err := r.pool.Begin(ctx)
 	if err != nil {
-		return fmt.Errorf("failed to begin candle transaction: %w", err)
+		return domain.SaveCandlesResult{},
+			fmt.Errorf("failed to begin candle transaction: %w", err)
 	}
 
 	defer tx.Rollback(context.Background())
@@ -112,7 +115,7 @@ func (r *CandleRepository) InsertBatch(
 	`
 
 	for _, candle := range candles {
-		_, err := tx.Exec(
+		tag, err := tx.Exec(
 			ctx,
 			query,
 			candle.Exchange,
@@ -127,13 +130,21 @@ func (r *CandleRepository) InsertBatch(
 		)
 
 		if err != nil {
-			return fmt.Errorf("failed to insert candle: %w", err)
+			return domain.SaveCandlesResult{},
+				fmt.Errorf("failed to insert candle: %w", err)
+		}
+
+		if tag.RowsAffected() == 1 {
+			result.InsertedCount++
+		} else {
+			result.DuplicateCount++
 		}
 	}
 
 	if err := tx.Commit(ctx); err != nil {
-		return fmt.Errorf("failed to commit candle transaction: %w", err)
+		return domain.SaveCandlesResult{},
+			fmt.Errorf("failed to commit candle transaction: %w", err)
 	}
 
-	return nil
+	return result, nil
 }
