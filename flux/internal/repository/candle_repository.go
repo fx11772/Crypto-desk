@@ -71,7 +71,9 @@ func (r *CandleRepository) GetLast(
 	}
 
 	if err != nil {
-		return nil, fmt.Errorf("failed to retrieve last candle: %w", err)
+		return nil, translatePersistenceError(
+			fmt.Errorf("failed to retrieve last candle: %w", err),
+		)
 	}
 
 	candle.Timestamp = candle.Timestamp.UTC()
@@ -92,7 +94,9 @@ func (r *CandleRepository) InsertBatch(
 	tx, err := r.pool.Begin(ctx)
 	if err != nil {
 		return domain.SaveCandlesResult{},
-			fmt.Errorf("failed to begin candle transaction: %w", err)
+			translatePersistenceError(
+				fmt.Errorf("failed to begin candle transaction: %w", err),
+			)
 	}
 
 	defer tx.Rollback(context.Background())
@@ -131,7 +135,9 @@ func (r *CandleRepository) InsertBatch(
 
 		if err != nil {
 			return domain.SaveCandlesResult{},
-				fmt.Errorf("failed to insert candle: %w", err)
+				translatePersistenceError(
+					fmt.Errorf("failed to insert candle: %w", err),
+				)
 		}
 
 		if tag.RowsAffected() == 1 {
@@ -143,7 +149,9 @@ func (r *CandleRepository) InsertBatch(
 
 	if err := tx.Commit(ctx); err != nil {
 		return domain.SaveCandlesResult{},
-			fmt.Errorf("failed to commit candle transaction: %w", err)
+			translatePersistenceError(
+				fmt.Errorf("failed to commit candle transaction: %w", err),
+			)
 	}
 
 	return result, nil

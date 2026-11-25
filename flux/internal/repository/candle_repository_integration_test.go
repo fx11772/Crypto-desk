@@ -218,6 +218,15 @@ func TestCandleRepository_GetLast_DatabaseError(t *testing.T) {
 		t.Fatal("expected a database error")
 	}
 
+	var permanentError *domain.PersistencePermanentError
+
+	if !errors.As(err, &permanentError) {
+		t.Fatalf(
+			"expected PersistencePermanentError, got %T",
+			err,
+		)
+	}
+
 	if candle != nil {
 		t.Error("expected no candle when database access fails")
 	}
@@ -598,6 +607,15 @@ func TestCandleRepository_InsertBatch_RollsBackOnError(t *testing.T) {
 		t.Fatal("expected an insertion error")
 	}
 
+	var permanentError *domain.PersistencePermanentError
+
+	if !errors.As(err, &permanentError) {
+		t.Fatalf(
+			"expected PersistencePermanentError, got %T",
+			err,
+		)
+	}
+
 	if result.InsertedCount != 0 {
 		t.Errorf("expected %d inserted candles, got %d", 0, result.InsertedCount)
 	}
@@ -703,5 +721,47 @@ func TestCandleRepository_InsertBatch_AllDuplicates(t *testing.T) {
 
 	if count != len(candles) {
 		t.Errorf("expected %d candles, got %d", len(candles), count)
+	}
+}
+
+func TestCandleRepository_GetLast_DeadlineExceeded(t *testing.T) {
+	// Arrange
+	pool := setupTestPool(t)
+	repo := NewCandleRepository(pool)
+
+	ctx, cancel := context.WithDeadline(
+		context.Background(),
+		time.Now().Add(-time.Second),
+	)
+	defer cancel()
+
+	// Act
+	candle, err := repo.GetLast(
+		ctx,
+		"kraken",
+		"BTC/USD",
+		"15m",
+	)
+
+	// Assert
+	if err == nil {
+		t.Fatal("expected a persistence error")
+	}
+
+	var temporaryError *domain.PersistenceTemporaryError
+
+	if !errors.As(err, &temporaryError) {
+		t.Fatalf(
+			"expected PersistenceTemporaryError, got %T",
+			err,
+		)
+	}
+
+	if !errors.Is(err, context.DeadlineExceeded) {
+		t.Error("original deadline error was not preserved")
+	}
+
+	if candle != nil {
+		t.Error("expected no candle")
 	}
 }
